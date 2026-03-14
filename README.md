@@ -38,7 +38,6 @@ Highlights best deal automatically
 City selector with 47 Indian cities
 5-minute cache to avoid redundant scrapes
 
-
 Tech Stack
 Frontend
 TechnologyPurposeReact + TypeScriptUI frameworkViteBuild tool and dev serverTailwind CSSStylingshadcn/uiComponent librarydate-fnsDate handlingReact Router v6RoutingWeb Speech APIBrowser speech-to-text
