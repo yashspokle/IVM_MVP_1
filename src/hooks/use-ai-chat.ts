@@ -1,143 +1,97 @@
 import { useState, useCallback } from "react";
-import { InventoryItem, ChatMessage } from "@/types/grocero";
-import { useToast } from "@/hooks/use-toast";
 
-const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/grocero-chat`;
+const SCRAPER_URL = "http://localhost:3001";
 
-export const useAiChat = (inventory: InventoryItem[]) => {
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+}
+
+export interface InventoryItem {
+  name: string;
+  quantity: number;
+  expiry_date?: string | null;
+}
+
+function uid() {
+  return Math.random().toString(36).slice(2);
+}
+
+export function useAiChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const { toast } = useToast();
+  const [error, setError] = useState<string | null>(null);
 
-  const sendMessage = useCallback(async (content: string, type: "chat" | "recipe" = "chat") => {
-    const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "user",
-      content,
-      created_at: new Date().toISOString(),
-    };
+  const sendMessage = useCallback(
+    async (content: string, inventory: InventoryItem[] = []) => {
+      if (!content.trim() || isLoading) return;
 
-    setMessages(prev => [...prev, userMessage]);
-    setIsLoading(true);
-
-    let assistantContent = "";
-
-    try {
-      const response = await fetch(CHAT_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-        },
-        body: JSON.stringify({
-          messages: [...messages, userMessage].map(m => ({
-            role: m.role,
-            content: m.content,
-          })),
-          inventory,
-          type,
-        }),
-      });
-
-      if (response.status === 429) {
-        toast({
-          title: "Rate limit",
-          description: "Too many requests. Please wait a moment.",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return null;
-      }
-
-      if (response.status === 402) {
-        toast({
-          title: "Credits exhausted",
-          description: "AI credits have been used up.",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-        return null;
-      }
-
-      if (!response.ok || !response.body) {
-        throw new Error("Failed to get response");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: "",
-        created_at: new Date().toISOString(),
+      const userMsg: ChatMessage = {
+        id: uid(),
+        role: "user",
+        content: content.trim(),
+        timestamp: new Date(),
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages(prev => [...prev, userMsg]);
+      setIsLoading(true);
+      setError(null);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        const res = await fetch(`${SCRAPER_URL}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: [...messages, userMsg].map(m => ({
+              role: m.role,
+              content: m.content,
+            })),
+            inventory,
+          }),
+        });
 
-        buffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
-          let line = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
-
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content;
-            if (content) {
-              assistantContent += content;
-              setMessages(prev => {
-                const last = prev[prev.length - 1];
-                if (last?.role === "assistant") {
-                  return prev.map((m, i) =>
-                    i === prev.length - 1 ? { ...m, content: assistantContent } : m
-                  );
-                }
-                return prev;
-              });
-            }
-          } catch {
-            buffer = line + "\n" + buffer;
-            break;
-          }
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `Server error ${res.status}`);
         }
+
+        const data = await res.json();
+        const assistantMsg: ChatMessage = {
+          id: uid(),
+          role: "assistant",
+          content: data.reply || "Sorry, I couldn't process that.",
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, assistantMsg]);
+      } catch (err: any) {
+        const errorText =
+          err.message?.includes("fetch")
+            ? "Scraper server is offline. Run: cd scraper-server && npm start"
+            : err.message || "Something went wrong";
+
+        setError(errorText);
+
+        const errorMsg: ChatMessage = {
+          id: uid(),
+          role: "assistant",
+          content: `⚠️ ${errorText}`,
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, errorMsg]);
+      } finally {
+        setIsLoading(false);
       }
+    },
+    [messages, isLoading]
+  );
 
-      setIsLoading(false);
-      return assistantContent;
-    } catch (error) {
-      console.error("Chat error:", error);
-      toast({
-        title: "Error",
-        description: "Failed to get AI response",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-      return null;
-    }
-  }, [messages, inventory, toast]);
-
-  const clearChat = useCallback(() => {
+  const clearMessages = useCallback(() => {
     setMessages([]);
+    setError(null);
   }, []);
 
-  return {
-    messages,
-    isLoading,
-    sendMessage,
-    clearChat,
-  };
-};
+  return { messages, isLoading, error, sendMessage, clearMessages };
+}

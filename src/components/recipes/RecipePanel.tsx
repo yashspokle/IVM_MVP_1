@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -13,25 +12,24 @@ interface RecipePanelProps {
 }
 
 const RecipePanel = ({ inventory }: RecipePanelProps) => {
-  const [recipe, setRecipe] = useState<string | null>(null);
-  const { isLoading, sendMessage, clearChat } = useAiChat(inventory);
+  const { isLoading, sendMessage, clearMessages, messages } = useAiChat();
   const { speak, isSpeaking } = useTextToSpeech();
 
   const generateRecipe = async (prompt?: string) => {
-    clearChat();
+    clearMessages();
     const defaultPrompt = "Suggest a delicious recipe I can make with my current inventory. Prioritize items that are expiring soon.";
-    const response = await sendMessage(prompt || defaultPrompt, "recipe");
-    if (response) {
-      setRecipe(response);
-    }
+    await sendMessage(prompt || defaultPrompt, inventory);
   };
 
   const recipePrompts = [
-    { label: "Quick Meal", prompt: "Suggest a quick 15-minute meal with my ingredients" },
-    { label: "Healthy Option", prompt: "Suggest a healthy low-calorie recipe with my inventory" },
+    { label: "Quick Meal",         prompt: "Suggest a quick 15-minute meal with my ingredients" },
+    { label: "Healthy Option",     prompt: "Suggest a healthy low-calorie recipe with my inventory" },
     { label: "Use Expiring Items", prompt: "Create a recipe that uses items expiring soon to reduce waste" },
-    { label: "Comfort Food", prompt: "Suggest a comforting home-cooked meal with available ingredients" },
+    { label: "Comfort Food",       prompt: "Suggest a comforting home-cooked meal with available ingredients" },
   ];
+
+  // Latest assistant reply is the recipe
+  const recipe = messages.filter(m => m.role === "assistant").slice(-1)[0]?.content ?? null;
 
   const handleSpeak = () => {
     if (recipe) {
@@ -55,20 +53,10 @@ const RecipePanel = ({ inventory }: RecipePanelProps) => {
           </CardTitle>
           {recipe && (
             <div className="flex gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSpeak}
-                className="text-muted-foreground"
-              >
+              <Button variant="ghost" size="sm" onClick={handleSpeak} className="text-muted-foreground">
                 <Volume2 className={`h-4 w-4 ${isSpeaking ? "animate-pulse" : ""}`} />
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => generateRecipe()}
-                className="text-muted-foreground"
-              >
+              <Button variant="ghost" size="sm" onClick={() => generateRecipe()} className="text-muted-foreground">
                 <RefreshCw className="h-4 w-4" />
               </Button>
             </div>
@@ -95,10 +83,7 @@ const RecipePanel = ({ inventory }: RecipePanelProps) => {
                 </Button>
               ))}
             </div>
-            <Button
-              className="mt-4 bg-emerald-600 hover:bg-emerald-700"
-              onClick={() => generateRecipe()}
-            >
+            <Button className="mt-4 bg-emerald-600 hover:bg-emerald-700" onClick={() => generateRecipe()}>
               Generate Any Recipe
             </Button>
           </div>
@@ -110,7 +95,7 @@ const RecipePanel = ({ inventory }: RecipePanelProps) => {
         ) : (
           <ScrollArea className="flex-1">
             <div className="prose prose-sm max-w-none">
-              <ReactMarkdown>{recipe}</ReactMarkdown>
+              <ReactMarkdown>{recipe ?? ""}</ReactMarkdown>
             </div>
           </ScrollArea>
         )}

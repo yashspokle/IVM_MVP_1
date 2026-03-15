@@ -1,257 +1,159 @@
-import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { InventoryItem } from "@/types/grocero";
-import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect } from 'react';
 
-export const useInventory = (userId: string | null) => {
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
+export interface InventoryItem {
+  id: string;
+  name: string;
+  quantity: number;
+  source: 'scan' | 'manual' | 'voice';
+  expiryDate?: string;
+  category?: string;
+  createdAt: string;
+  userId: string;
+}
 
-  // Fetch inventory from database
-  const fetchInventory = useCallback(async () => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
+export function useInventory(userId: string | null) {
+  const [inventory, setInventory] = useState<InventoryItem[]>(() => {
+    if (!userId) return [];
+    const savedItems = localStorage.getItem(`grocero_inventory_${userId}`);
+    return savedItems ? JSON.parse(savedItems) : [];
+  });
+  const [loading, setLoading] = useState(false);
 
-    try {
-      const { data, error } = await supabase
-        .from("inventory")
-        .select("*")
-        .eq("user_id", userId)
-        .order("added_at", { ascending: false });
-
-      if (error) throw error;
-      
-      setInventory(data?.map(item => ({
-        ...item,
-        source: item.source as "scan" | "manual" | "voice"
-      })) || []);
-    } catch (error) {
-      console.error("Error fetching inventory:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load inventory",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [userId, toast]);
-
+  // Save to localStorage whenever inventory changes
   useEffect(() => {
-    fetchInventory();
-  }, [fetchInventory]);
+    if (userId) {
+      localStorage.setItem(`grocero_inventory_${userId}`, JSON.stringify(inventory));
+    }
+  }, [inventory, userId]);
 
-  // Add item to inventory
-  const addItem = useCallback(async (
-    name: string, 
-    quantity: number, 
-    source: "scan" | "manual" | "voice",
+  // Load inventory when userId changes
+  useEffect(() => {
+    if (userId) {
+      const savedItems = localStorage.getItem(`grocero_inventory_${userId}`);
+      setInventory(savedItems ? JSON.parse(savedItems) : []);
+    } else {
+      setInventory([]);
+    }
+  }, [userId]);
+
+  const addItem = async (
+    name: string,
+    quantity: number,
+    source: 'scan' | 'manual' | 'voice',
     expiryDate?: string,
     category?: string
   ) => {
-    if (!userId) {
-      toast({
-        title: "Sign in required",
-        description: "Please sign in to save items",
-        variant: "destructive",
-      });
-      return null;
-    }
-
-    const normalizedName = name.toLowerCase().trim();
+    if (!userId) return;
+    
+    setLoading(true);
     
     // Check if item already exists
-    const existing = inventory.find(i => i.name.toLowerCase() === normalizedName);
-    
-    if (existing) {
-      // Update quantity
-      const newQuantity = existing.quantity + quantity;
-      const { error } = await supabase
-        .from("inventory")
-        .update({ 
-          quantity: newQuantity,
-          expiry_date: expiryDate || existing.expiry_date,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", existing.id);
+    const existingItem = inventory.find(
+      (item) => item.name.toLowerCase() === name.toLowerCase()
+    );
 
-      if (error) {
-        console.error("Error updating item:", error);
-        toast({ title: "Error", description: "Failed to update item", variant: "destructive" });
-        return null;
-      }
-
-      setInventory(prev => prev.map(i => 
-        i.id === existing.id 
-          ? { ...i, quantity: newQuantity, expiry_date: expiryDate || i.expiry_date }
-          : i
-      ));
-      
-      toast({ title: "Updated", description: `${normalizedName} quantity updated to ${newQuantity}` });
-      return existing.id;
-    }
-
-    // Create new item
-    const newItem = {
-      user_id: userId,
-      name: normalizedName,
-      quantity,
-      source,
-      expiry_date: expiryDate || null,
-      category: category || null,
-      low_stock_threshold: 2,
-    };
-
-    const { data, error } = await supabase
-      .from("inventory")
-      .insert(newItem)
-      .select()
-      .single();
-
-    if (error) {
-      console.error("Error adding item:", error);
-      toast({ title: "Error", description: "Failed to add item", variant: "destructive" });
-      return null;
-    }
-
-    setInventory(prev => [{
-      ...data,
-      source: data.source as "scan" | "manual" | "voice"
-    }, ...prev]);
-    
-    toast({ title: "Added", description: `${normalizedName} added to inventory` });
-    return data.id;
-  }, [userId, inventory, toast]);
-
-  // Remove quantity from item
-  const removeItem = useCallback(async (name: string, quantity: number) => {
-    if (!userId) return;
-
-    const normalizedName = name.toLowerCase().trim();
-    const existing = inventory.find(i => i.name.toLowerCase() === normalizedName);
-    
-    if (!existing) {
-      toast({
-        title: "Not found",
-        description: `${name} is not in your inventory`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const newQuantity = existing.quantity - quantity;
-    
-    if (newQuantity <= 0) {
-      await deleteItem(existing.id);
+    if (existingItem) {
+      // Update quantity if item exists
+      setInventory((prev) =>
+        prev.map((item) =>
+          item.id === existingItem.id
+            ? { ...item, quantity: item.quantity + quantity }
+            : item
+        )
+      );
     } else {
-      const { error } = await supabase
-        .from("inventory")
-        .update({ quantity: newQuantity })
-        .eq("id", existing.id);
-
-      if (error) {
-        toast({ title: "Error", description: "Failed to update item", variant: "destructive" });
-        return;
-      }
-
-      setInventory(prev => prev.map(i => 
-        i.id === existing.id ? { ...i, quantity: newQuantity } : i
-      ));
-      
-      toast({ title: "Updated", description: `Removed ${quantity} ${normalizedName}` });
+      // Add new item
+      const newItem: InventoryItem = {
+        id: Date.now().toString(),
+        name,
+        quantity,
+        source,
+        expiryDate,
+        category,
+        createdAt: new Date().toISOString(),
+        userId,
+      };
+      setInventory((prev) => [...prev, newItem]);
     }
-  }, [userId, inventory, toast]);
-
-  // Delete item completely
-  const deleteItem = useCallback(async (id: string) => {
-    const { error } = await supabase
-      .from("inventory")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      toast({ title: "Error", description: "Failed to delete item", variant: "destructive" });
-      return;
-    }
-
-    setInventory(prev => prev.filter(i => i.id !== id));
-    toast({ title: "Deleted", description: "Item removed from inventory" });
-  }, [toast]);
-
-  // Update item quantity
-  const updateQuantity = useCallback(async (id: string, delta: number) => {
-    const item = inventory.find(i => i.id === id);
-    if (!item) return;
-
-    const newQuantity = Math.max(1, item.quantity + delta);
     
-    const { error } = await supabase
-      .from("inventory")
-      .update({ quantity: newQuantity })
-      .eq("id", id);
+    setLoading(false);
+  };
 
-    if (error) {
-      toast({ title: "Error", description: "Failed to update quantity", variant: "destructive" });
-      return;
-    }
-
-    setInventory(prev => prev.map(i => 
-      i.id === id ? { ...i, quantity: newQuantity } : i
-    ));
-  }, [inventory, toast]);
-
-  // Update expiry date
-  const updateExpiryDate = useCallback(async (id: string, expiryDate: string | null) => {
-    const { error } = await supabase
-      .from("inventory")
-      .update({ expiry_date: expiryDate })
-      .eq("id", id);
-
-    if (error) {
-      toast({ title: "Error", description: "Failed to update expiry date", variant: "destructive" });
-      return;
-    }
-
-    setInventory(prev => prev.map(i => 
-      i.id === id ? { ...i, expiry_date: expiryDate || undefined } : i
-    ));
-  }, [toast]);
-
-  // Clear all inventory
-  const clearInventory = useCallback(async () => {
+  const removeItem = async (name: string, quantity: number) => {
     if (!userId) return;
+    
+    setLoading(true);
+    
+    setInventory((prev) =>
+      prev
+        .map((item) => {
+          if (item.name.toLowerCase() === name.toLowerCase()) {
+            const newQuantity = item.quantity - quantity;
+            return newQuantity > 0 ? { ...item, quantity: newQuantity } : null;
+          }
+          return item;
+        })
+        .filter((item): item is InventoryItem => item !== null)
+    );
+    
+    setLoading(false);
+  };
 
-    const { error } = await supabase
-      .from("inventory")
-      .delete()
-      .eq("user_id", userId);
+  const deleteItem = async (id: string) => {
+    if (!userId) return;
+    
+    setLoading(true);
+    setInventory((prev) => prev.filter((item) => item.id !== id));
+    setLoading(false);
+  };
 
-    if (error) {
-      toast({ title: "Error", description: "Failed to clear inventory", variant: "destructive" });
-      return;
-    }
+  const updateQuantity = async (id: string, quantity: number) => {
+    if (!userId) return;
+    
+    setLoading(true);
+    setInventory((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, quantity } : item))
+    );
+    setLoading(false);
+  };
 
+  const updateExpiryDate = async (id: string, expiryDate: string) => {
+    if (!userId) return;
+    
+    setLoading(true);
+    setInventory((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, expiryDate } : item))
+    );
+    setLoading(false);
+  };
+
+  const clearInventory = async () => {
+    if (!userId) return;
+    
+    setLoading(true);
     setInventory([]);
-    toast({ title: "Cleared", description: "All items removed from inventory" });
-  }, [userId, toast]);
+    localStorage.removeItem(`grocero_inventory_${userId}`);
+    setLoading(false);
+  };
 
-  // Get low stock items
-  const lowStockItems = inventory.filter(i => i.quantity <= (i.low_stock_threshold || 2));
+  // Calculate low stock items (quantity < 3)
+  const lowStockItems = inventory.filter((item) => item.quantity < 3);
 
-  // Get expired items
-  const today = new Date().toISOString().split('T')[0];
-  const expiredItems = inventory.filter(i => i.expiry_date && i.expiry_date < today);
+  // Calculate expired items
+  const expiredItems = inventory.filter((item) => {
+    if (!item.expiryDate) return false;
+    return new Date(item.expiryDate) < new Date();
+  });
 
-  // Get items expiring soon (within 3 days)
-  const expiringItems = inventory.filter(i => {
-    if (!i.expiry_date) return false;
-    const expDate = new Date(i.expiry_date);
-    const threeDaysFromNow = new Date();
-    threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
-    return expDate <= threeDaysFromNow && expDate >= new Date(today);
+  // Calculate expiring items (within 7 days)
+  const expiringItems = inventory.filter((item) => {
+    if (!item.expiryDate) return false;
+    const expiryDate = new Date(item.expiryDate);
+    const today = new Date();
+    const daysUntilExpiry = Math.floor(
+      (expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return daysUntilExpiry <= 7 && daysUntilExpiry >= 0;
   });
 
   return {
@@ -263,9 +165,8 @@ export const useInventory = (userId: string | null) => {
     updateQuantity,
     updateExpiryDate,
     clearInventory,
-    refetch: fetchInventory,
     lowStockItems,
     expiredItems,
     expiringItems,
   };
-};
+}

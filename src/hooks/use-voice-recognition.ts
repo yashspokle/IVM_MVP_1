@@ -1,118 +1,99 @@
-import { useCallback, useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
 
-// Type declarations for Web Speech API
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-}
+export type VoiceCommandAction =
+  | { type: "add";     name: string; quantity: number; expiry?: string | null; category?: string }
+  | { type: "remove";  name: string; quantity: number }
+  | { type: "restock"; name: string; store?: string | null }
+  | { type: "unknown"; transcript: string };
 
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-}
+const SCRAPER_URL = "http://localhost:3001";
 
-declare global {
-  interface Window {
-    SpeechRecognition: new () => SpeechRecognition;
-    webkitSpeechRecognition: new () => SpeechRecognition;
+// ─── AI command parser — calls scraper server (avoids browser CORS) ───────────
+export async function parseVoiceCommandAI(
+  transcript: string,
+  inventoryNames: string[] = []
+): Promise<VoiceCommandAction> {
+  try {
+    const res = await fetch(`${SCRAPER_URL}/api/voice`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript, inventoryNames }),
+    });
+    if (!res.ok) throw new Error(`Server error ${res.status}`);
+    return await res.json() as VoiceCommandAction;
+  } catch {
+    return { type: "unknown", transcript };
   }
 }
 
-interface SpeechRecognition extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onstart: (() => void) | null;
-  onresult: ((event: SpeechRecognitionEvent) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-}
-
-interface VoiceRecognitionResult {
+// ─── Speech recognition hook ───────────────────────────────────────────────────
+export interface VoiceState {
+  isListening: boolean;
+  isParsing: boolean;
   transcript: string;
-  confidence: number;
+  error: string | null;
 }
 
-export const useVoiceRecognition = () => {
-  const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState("");
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+export function useVoiceRecognition() {
+  const [state, setState] = useState<VoiceState>({
+    isListening: false, isParsing: false, transcript: "", error: null,
+  });
+  const recRef = useRef<any>(null);
 
-  const startListening = useCallback((onResult?: (result: VoiceRecognitionResult) => void) => {
-    if (!("webkitSpeechRecognition" in window) && !("SpeechRecognition" in window)) {
-      console.warn("Speech recognition not supported");
-      return;
-    }
+  const isSupported =
+    typeof window !== "undefined" &&
+    ("SpeechRecognition" in window || "webkitSpeechRecognition" in window);
 
-    const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const recognition = new SpeechRecognitionClass();
-    recognitionRef.current = recognition;
+  const startListening = useCallback(
+    (onResult: (cmd: VoiceCommandAction, raw: string) => void, inventoryNames: string[] = []) => {
+      if (!isSupported) {
+        setState(s => ({ ...s, error: "Speech recognition not supported. Use Chrome or Edge." }));
+        return;
+      }
 
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = "en-US";
+      const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const rec = new SR();
+      recRef.current = rec;
+      rec.continuous = false;
+      rec.interimResults = true;
+      rec.lang = "en-IN";
 
-    recognition.onstart = () => setIsListening(true);
-    
-    recognition.onresult = (event) => {
-      const result = event.results[0][0];
-      const text = result.transcript;
-      setTranscript(text);
-      onResult?.({ transcript: text, confidence: result.confidence });
-    };
+      rec.onstart = () =>
+        setState({ isListening: true, isParsing: false, transcript: "", error: null });
 
-    recognition.onerror = (event) => {
-      console.error("Speech recognition error:", event.error);
-      setIsListening(false);
-    };
+      rec.onresult = (e: any) => {
+        const interim = Array.from(e.results as any[])
+          .map((r: any) => r[0].transcript)
+          .join("");
+        setState(s => ({ ...s, transcript: interim }));
 
-    recognition.onend = () => setIsListening(false);
+        if (e.results[e.results.length - 1].isFinal) {
+          const final = e.results[e.results.length - 1][0].transcript;
+          setState(s => ({ ...s, isListening: false, isParsing: true, transcript: final }));
+          parseVoiceCommandAI(final, inventoryNames).then(cmd => {
+            setState(s => ({ ...s, isParsing: false }));
+            onResult(cmd, final);
+          });
+        }
+      };
 
-    recognition.start();
-  }, []);
+      rec.onerror = (e: any) => {
+        setState({ isListening: false, isParsing: false, transcript: "", error: e.error });
+      };
+
+      rec.onend = () => {
+        setState(s => ({ ...s, isListening: false }));
+      };
+
+      rec.start();
+    },
+    [isSupported]
+  );
 
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    setIsListening(false);
+    recRef.current?.stop();
+    setState(s => ({ ...s, isListening: false }));
   }, []);
 
-  return { startListening, stopListening, isListening, transcript };
-};
-
-// Parse voice commands for inventory management
-export const parseVoiceCommand = (transcript: string): { action: string; item: string; quantity: number } | null => {
-  const lower = transcript.toLowerCase();
-  
-  // Patterns: "add 3 apples", "remove 2 bananas", "delete all oranges", "clear list"
-  const addMatch = lower.match(/add\s+(\d+)?\s*(.+)/);
-  const removeMatch = lower.match(/remove\s+(\d+)?\s*(.+)/);
-  const deleteMatch = lower.match(/delete\s+(?:all\s+)?(.+)/);
-  
-  if (lower.includes("clear") && (lower.includes("list") || lower.includes("all"))) {
-    return { action: "clear", item: "", quantity: 0 };
-  }
-  
-  if (addMatch) {
-    const qty = addMatch[1] ? parseInt(addMatch[1]) : 1;
-    const item = addMatch[2]?.trim().replace(/s$/, "") || "";
-    return { action: "add", item, quantity: qty };
-  }
-  
-  if (removeMatch) {
-    const qty = removeMatch[1] ? parseInt(removeMatch[1]) : 1;
-    let item = removeMatch[2]?.trim() || "";
-    // Handle "one of them" -> use last context
-    if (item.includes("of them") || item === "one") {
-      return { action: "remove", item: "__last__", quantity: qty };
-    }
-    item = item.replace(/s$/, "");
-    return { action: "remove", item, quantity: qty };
-  }
-  
-  if (deleteMatch) {
-    const item = deleteMatch[1]?.trim().replace(/s$/, "") || "";
-    return { action: "delete", item, quantity: 0 };
-  }
-  
-  return null;
-};
+  return { ...state, isSupported, startListening, stopListening };
+}

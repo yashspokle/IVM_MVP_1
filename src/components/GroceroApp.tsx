@@ -8,7 +8,7 @@ import AuthForm from "./auth/AuthForm";
 import InventoryDashboard from "./inventory/InventoryDashboard";
 import AddItemDialog from "./inventory/AddItemDialog";
 import SmartScanner from "./scanner/SmartScanner";
-import VoiceControl from "./voice/VoiceControl";
+import VoiceControl from "./inventory/VoiceControl";
 import AIChatbot from "./chat/AIChatbot";
 import RecipePanel from "./recipes/RecipePanel";
 import { TabType } from "@/types/grocero";

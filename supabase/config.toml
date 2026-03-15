@@ -1,4 +1,0 @@
-project_id = "cdbjffsbdfwfffdbnnli"
-
-[functions.grocero-chat]
-verify_jwt = false
