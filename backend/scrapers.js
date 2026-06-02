@@ -1,4 +1,13 @@
-const { chromium } = require("playwright");
+let chromium;
+
+try {
+  chromium = require("playwright").chromium;
+} catch (err) {
+  console.error(
+    "Playwright not available:",
+    err.message
+  );
+}
 const CACHE = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
 const CITY_CONFIG = {
@@ -68,24 +77,23 @@ const CITY_CONFIG = {
 // ─── Shared single browser instance ──────────────────────────────────────────
 let sharedBrowser = null;
 async function getBrowser() {
+  if (!chromium) {
+    throw new Error(
+      "Playwright browser not installed"
+    );
+  }
+
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
     sharedBrowser = await chromium.launch({
-  headless: true,
-  chromiumSandbox: false,
-  args: [
-    "--no-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-gpu",
-    "--disable-extensions",
-    "--disable-background-networking",
-    "--disable-background-timer-throttling",
-    "--disable-renderer-backgrounding",
-    "--disable-sync",
-    "--disable-default-apps",
-    "--disable-blink-features=AutomationControlled",
-  ],
-});
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+      ],
+    });
   }
+
   return sharedBrowser;
 }
 
