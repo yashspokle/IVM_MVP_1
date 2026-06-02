@@ -105,8 +105,6 @@ async function getBrowser() {
   return sharedBrowser;
 }
 
-  
-
 async function newStealthPage(browser, city) {
   const cfg = CITY_CONFIG[city] || CITY_CONFIG.mumbai;
   const context = await browser.newContext({
@@ -371,7 +369,46 @@ if (
   return cached.data;
 }
   console.log(`  Scraping "${itemName}" for city: ${CITY_CONFIG[resolvedCity]?.name || resolvedCity}`);
-  await getBrowser(); // warm up shared browser
+ try {
+  await getBrowser();
+} catch (err) {
+  console.error("Price scraper unavailable:", err.message);
+
+  return [
+    {
+      store: "Blinkit",
+      logo: "⚡",
+      redirectOnly: true,
+      inStock: true,
+      error: "Price comparison unavailable",
+      url: `https://blinkit.com/s/?q=${encodeURIComponent(itemName)}`
+    },
+    {
+      store: "Zepto",
+      logo: "🟣",
+      redirectOnly: true,
+      inStock: true,
+      error: "Price comparison unavailable",
+      url: `https://www.zeptonow.com/search?query=${encodeURIComponent(itemName)}`
+    },
+    {
+      store: "Swiggy Instamart",
+      logo: "🟠",
+      redirectOnly: true,
+      inStock: true,
+      error: "Price comparison unavailable",
+      url: `https://www.swiggy.com/instamart/search?query=${encodeURIComponent(itemName)}`
+    },
+    {
+      store: "DMart Ready",
+      logo: "🔵",
+      redirectOnly: true,
+      inStock: true,
+      error: "Price comparison unavailable",
+      url: `https://www.dmart.in/search?q=${encodeURIComponent(itemName)}`
+    }
+  ];
+}
 
   const [r1, r2, r3, r4] = await Promise.allSettled([
     scrapeBlinkit(itemName, resolvedCity),

@@ -56,14 +56,12 @@ app.get("/api/prices/:itemName", async (req, res) => {
     res.json({ results, cached: false, city: cityKey, cityName: CITY_CONFIG[cityKey]?.name });
   } catch (err) {
   console.error(`[ERROR] ${err.message}`);
-
-  if (err.message === "SCRAPER_UNAVAILABLE") {
-    return res.status(503).json({
-      error: "Price comparison temporarily unavailable",
-      message:
-        "Playwright browser not installed on server",
-    });
-  }
+if (
+  err.message === "SCRAPER_UNAVAILABLE" ||
+  err.message.includes("browserType.launch") ||
+  err.message.includes("Executable doesn't exist")
+) 
+  
 
   return res.status(500).json({
     error: "Scraping failed",
