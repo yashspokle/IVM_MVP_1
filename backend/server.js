@@ -55,10 +55,21 @@ app.get("/api/prices/:itemName", async (req, res) => {
     cache.set(cacheKey, { data: results, timestamp: Date.now() });
     res.json({ results, cached: false, city: cityKey, cityName: CITY_CONFIG[cityKey]?.name });
   } catch (err) {
-    console.error(`[ERROR] ${err.message}`);
-    res.status(500).json({ error: "Scraping failed", message: err.message });
+  console.error(`[ERROR] ${err.message}`);
+
+  if (err.message === "SCRAPER_UNAVAILABLE") {
+    return res.status(503).json({
+      error: "Price comparison temporarily unavailable",
+      message:
+        "Playwright browser not installed on server",
+    });
   }
-});
+
+  return res.status(500).json({
+    error: "Scraping failed",
+    message: err.message,
+  });
+}
 
 // ─── POST /api/voice ──────────────────────────────────────────────────────────
 // Parses voice transcript using GitHub Models (gpt-4o-mini)

@@ -76,9 +76,10 @@ const CITY_CONFIG = {
 
 // ─── Shared single browser instance ──────────────────────────────────────────
 let sharedBrowser = null;
+
 async function getBrowser() {
   if (!chromium) {
-    throw new Error("Playwright unavailable");
+    throw new Error("SCRAPER_UNAVAILABLE");
   }
 
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
@@ -92,16 +93,19 @@ async function getBrowser() {
         ],
       });
     } catch (err) {
-  if (err.message === "SCRAPER_UNAVAILABLE") {
-    return res.status(503).json({
-      error: "Price comparison temporarily unavailable",
-    });
+      console.error(
+        "Browser launch failed:",
+        err.message
+      );
+
+      throw new Error("SCRAPER_UNAVAILABLE");
+    }
   }
 
-  return res.status(500).json({
-    error: err.message,
-  });
+  return sharedBrowser;
 }
+
+  
 
 async function newStealthPage(browser, city) {
   const cfg = CITY_CONFIG[city] || CITY_CONFIG.mumbai;
