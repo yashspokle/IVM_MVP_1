@@ -6,12 +6,24 @@ const { scrapeAll, CITY_CONFIG, findNearestCity } = require("./scrapers");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || origin.startsWith("http://localhost")) callback(null, true);
-    else callback(new Error("Not allowed by CORS"));
-  },
-}));
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (
+        !origin ||
+        origin.includes("localhost") ||
+        origin.includes("vercel.app")
+      ) {
+        return callback(null, true);
+      }
+
+      return callback(
+        new Error("Not allowed by CORS")
+      );
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // ─── In-memory cache (5 min TTL) ─────────────────────────────────────────────
