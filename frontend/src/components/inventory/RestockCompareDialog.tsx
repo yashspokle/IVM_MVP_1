@@ -34,7 +34,9 @@ interface RestockCompareDialogProps {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const SCRAPER_URL = "http://localhost:3001";
+const SCRAPER_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:3001";
 
 const STORE_STYLE: Record<string, { emoji: string }> = {
   "Blinkit":           { emoji: "⚡" },

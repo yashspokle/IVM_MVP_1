@@ -6,7 +6,9 @@ export type VoiceCommandAction =
   | { type: "restock"; name: string; store?: string | null }
   | { type: "unknown"; transcript: string };
 
-const SCRAPER_URL = "http://localhost:3001";
+const SCRAPER_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:3001";
 
 // ─── AI command parser — calls scraper server (avoids browser CORS) ───────────
 export async function parseVoiceCommandAI(
