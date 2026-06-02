@@ -242,7 +242,13 @@ app.get("/api/cities", (_, res) => {
 
 // ─── GET /api/health ──────────────────────────────────────────────────────────
 app.get("/api/health", (_, res) => res.json({ status: "ok" }));
-
+app.get("/", (req, res) => {
+  res.json({
+    status: "ok",
+    service: "Grocero Backend",
+    version: "1.0.0",
+  });
+});
 app.listen(PORT, () => {
   console.log(`\n🛒 Grocero Scraper running on http://localhost:${PORT}`);
   console.log(`   GET  /api/prices/:item?city=mumbai`);
