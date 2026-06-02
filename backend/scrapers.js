@@ -78,23 +78,29 @@ const CITY_CONFIG = {
 let sharedBrowser = null;
 async function getBrowser() {
   if (!chromium) {
-    throw new Error(
-      "Playwright browser not installed"
-    );
+    throw new Error("Playwright unavailable");
   }
 
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
-    sharedBrowser = await chromium.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-      ],
+    try {
+      sharedBrowser = await chromium.launch({
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+        ],
+      });
+    } catch (err) {
+  if (err.message === "SCRAPER_UNAVAILABLE") {
+    return res.status(503).json({
+      error: "Price comparison temporarily unavailable",
     });
   }
 
-  return sharedBrowser;
+  return res.status(500).json({
+    error: err.message,
+  });
 }
 
 async function newStealthPage(browser, city) {
