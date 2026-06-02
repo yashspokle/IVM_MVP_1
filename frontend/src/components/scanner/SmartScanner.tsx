@@ -1,6 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from "react";
-import * as tf from "@tensorflow/tfjs";
-import * as mobilenet from "@tensorflow-models/mobilenet";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,8 +20,8 @@ interface SmartScannerProps {
 const SmartScanner = ({ onAddItem }: SmartScannerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [model, setModel] = useState<mobilenet.MobileNet | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [model, setModel] = useState<any>(null);
+const [isLoading, setIsLoading] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [detectedItem, setDetectedItem] = useState<DetectedItem | null>(null);
@@ -33,31 +32,48 @@ const SmartScanner = ({ onAddItem }: SmartScannerProps) => {
   const { toast } = useToast();
 
   // Confidence threshold for detection
-  const CONFIDENCE_THRESHOLD = 0.1;
+  const CONFIDENCE_THRESHOLD = 0.25;
+  const loadModel = useCallback(async () => {
+  if (model) return model;
 
-  useEffect(() => {
-    const loadModel = async () => {
-      try {
-        await tf.ready();
-        const loadedModel = await mobilenet.load();
-        setModel(loadedModel);
-        setIsLoading(false);
-      } catch (error) {
-        console.error("Error loading model:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load AI model. Please refresh.",
-          variant: "destructive",
-        });
-      }
-    };
-    loadModel();
-  }, [toast]);
+  try {
+    setIsLoading(true);
+
+    const tf = await import("@tensorflow/tfjs");
+    const mobilenet = await import("@tensorflow-models/mobilenet");
+
+    await tf.ready();
+
+    const loadedModel = await mobilenet.load({
+      version: 2,
+      alpha: 0.5,
+    });
+
+    setModel(loadedModel);
+
+    return loadedModel;
+  } catch (error) {
+    toast({
+      title: "Error",
+      description: "Failed to load AI Scanner",
+      variant: "destructive",
+    });
+
+    return null;
+  } finally {
+    setIsLoading(false);
+  }
+}, [model, toast]);
 
   const startCamera = useCallback(async () => {
+    await loadModel();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: 640, height: 480 },
+       video: {
+  facingMode: "environment",
+  width: 320,
+  height: 240,
+}
       });
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
@@ -136,7 +152,16 @@ const SmartScanner = ({ onAddItem }: SmartScannerProps) => {
       speak(`This looks like ${detectedItem.name}`);
     }
   };
+useEffect(() => {
+  return () => {
+    if (videoRef.current?.srcObject) {
+      const stream =
+        videoRef.current.srcObject as MediaStream;
 
+      stream.getTracks().forEach(track => track.stop());
+    }
+  };
+}, []);
   const handleAddToInventory = () => {
     if (detectedItem) {
       onAddItem(detectedItem.name, quantity, "scan", expiryDate || undefined);

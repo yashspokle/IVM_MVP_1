@@ -1,5 +1,6 @@
 const { chromium } = require("playwright");
-
+const CACHE = new Map();
+const CACHE_TTL = 5 * 60 * 1000;
 const CITY_CONFIG = {
   // Maharashtra
   mumbai:       { lat: 19.0760, lng: 72.8777, pincode: "400001", name: "Mumbai" },
@@ -69,9 +70,21 @@ let sharedBrowser = null;
 async function getBrowser() {
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
     sharedBrowser = await chromium.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
-    });
+  headless: true,
+  chromiumSandbox: false,
+  args: [
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--disable-extensions",
+    "--disable-background-networking",
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-sync",
+    "--disable-default-apps",
+    "--disable-blink-features=AutomationControlled",
+  ],
+});
   }
   return sharedBrowser;
 }
@@ -80,7 +93,10 @@ async function newStealthPage(browser, city) {
   const cfg = CITY_CONFIG[city] || CITY_CONFIG.mumbai;
   const context = await browser.newContext({
     userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    viewport: { width: 1280, height: 800 },
+viewport: {
+  width: 768,
+  height: 1024,
+},
     locale: "en-IN",
     geolocation: { latitude: cfg.lat, longitude: cfg.lng },
     permissions: ["geolocation"],
@@ -230,8 +246,10 @@ async function scrapeBlinkit(itemName, city) {
     await page.goto(`https://blinkit.com/s/?q=${encodeURIComponent(itemName)}`, {
       waitUntil: "domcontentloaded", timeout: 25000,
     });
-    await page.waitForTimeout(4000);
-
+await Promise.race([
+  page.waitForLoadState("networkidle"),
+  page.waitForTimeout(1500),
+]);
     const text = await page.evaluate(() => document.body.innerText);
     const products = parseBlinkit(text);
 
@@ -269,7 +287,10 @@ async function scrapeZepto(itemName, city) {
     await page.goto(`https://www.zeptonow.com/search?query=${encodeURIComponent(itemName)}`, {
       waitUntil: "domcontentloaded", timeout: 25000,
     });
-    await page.waitForTimeout(4000);
+    await Promise.race([
+  page.waitForLoadState("networkidle"),
+  page.waitForTimeout(1500),
+]);
 
     const text = await page.evaluate(() => document.body.innerText);
     const products = parseZepto(text);
@@ -321,6 +342,16 @@ function findNearestCity(lat, lng) {
 // ─── Scrape all 4 stores in parallel ─────────────────────────────────────────
 async function scrapeAll(itemName, city) {
   const resolvedCity = city || "mumbai";
+  const cacheKey = `${itemName}_${resolvedCity}`;
+
+const cached = CACHE.get(cacheKey);
+
+if (
+  cached &&
+  Date.now() - cached.time < CACHE_TTL
+) {
+  return cached.data;
+}
   console.log(`  Scraping "${itemName}" for city: ${CITY_CONFIG[resolvedCity]?.name || resolvedCity}`);
   await getBrowser(); // warm up shared browser
 
@@ -339,7 +370,10 @@ async function scrapeAll(itemName, city) {
     if (r.redirectOnly) console.log(`  [${r.store}] → redirect only`);
     else console.log(`  [${r.store}] ₹${r.price} | ${r.unit} | ${r.productName}`);
   });
-
+CACHE.set(cacheKey, {
+  data: final,
+  time: Date.now(),
+});
   return final;
 }
 

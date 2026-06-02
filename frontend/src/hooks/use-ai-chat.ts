@@ -1,97 +1,170 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 
 const SCRAPER_URL = "http://localhost:3001";
 
 export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
+id: string;
+role: "user" | "assistant";
+content: string;
+timestamp: Date;
 }
 
 export interface InventoryItem {
-  name: string;
-  quantity: number;
-  expiry_date?: string | null;
+name: string;
+quantity: number;
+expiry_date?: string | null;
 }
 
-function uid() {
-  return Math.random().toString(36).slice(2);
-}
+const uid = () =>
+crypto.randomUUID
+? crypto.randomUUID()
+: Math.random().toString(36).slice(2);
 
 export function useAiChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+const [messages, setMessages] = useState<ChatMessage[]>([]);
+const [isLoading, setIsLoading] = useState(false);
+const [error, setError] = useState<string | null>(null);
 
-  const sendMessage = useCallback(
-    async (content: string, inventory: InventoryItem[] = []) => {
-      if (!content.trim() || isLoading) return;
+const messagesRef = useRef<ChatMessage[]>([]);
 
-      const userMsg: ChatMessage = {
-        id: uid(),
-        role: "user",
-        content: content.trim(),
-        timestamp: new Date(),
-      };
+const sendMessage = useCallback(
+async (
+content: string,
+inventory: InventoryItem[] = []
+) => {
+const trimmed = content.trim();
 
-      setMessages(prev => [...prev, userMsg]);
-      setIsLoading(true);
-      setError(null);
+  if (!trimmed || isLoading) return;
 
-      try {
-        const res = await fetch(`${SCRAPER_URL}/api/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: [...messages, userMsg].map(m => ({
-              role: m.role,
-              content: m.content,
-            })),
-            inventory,
-          }),
-        });
+  const userMsg: ChatMessage = {
+    id: uid(),
+    role: "user",
+    content: trimmed,
+    timestamp: new Date(),
+  };
 
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || `Server error ${res.status}`);
-        }
+  const updatedMessages = [
+    ...messagesRef.current,
+    userMsg,
+  ];
 
-        const data = await res.json();
-        const assistantMsg: ChatMessage = {
-          id: uid(),
-          role: "assistant",
-          content: data.reply || "Sorry, I couldn't process that.",
-          timestamp: new Date(),
-        };
+  messagesRef.current = updatedMessages;
 
-        setMessages(prev => [...prev, assistantMsg]);
-      } catch (err: any) {
-        const errorText =
-          err.message?.includes("fetch")
-            ? "Scraper server is offline. Run: cd scraper-server && npm start"
-            : err.message || "Something went wrong";
+  setMessages(updatedMessages);
+  setError(null);
+  setIsLoading(true);
 
-        setError(errorText);
+  try {
+    const controller =
+      new AbortController();
 
-        const errorMsg: ChatMessage = {
-          id: uid(),
-          role: "assistant",
-          content: `⚠️ ${errorText}`,
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, errorMsg]);
-      } finally {
-        setIsLoading(false);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      20000
+    );
+
+    const res = await fetch(
+      `${SCRAPER_URL}/api/chat`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type":
+            "application/json",
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          messages:
+            updatedMessages.map(
+              (m) => ({
+                role: m.role,
+                content: m.content,
+              })
+            ),
+          inventory,
+        }),
       }
-    },
-    [messages, isLoading]
-  );
+    );
 
-  const clearMessages = useCallback(() => {
-    setMessages([]);
-    setError(null);
-  }, []);
+    clearTimeout(timeout);
 
-  return { messages, isLoading, error, sendMessage, clearMessages };
+    if (!res.ok) {
+      const err = await res
+        .json()
+        .catch(() => ({}));
+
+      throw new Error(
+        err.error ||
+          `Server error ${res.status}`
+      );
+    }
+
+    const data = await res.json();
+
+    const assistantMsg: ChatMessage = {
+      id: uid(),
+      role: "assistant",
+      content:
+        data.reply ||
+        "Sorry, I couldn't process that.",
+      timestamp: new Date(),
+    };
+
+    messagesRef.current = [
+      ...messagesRef.current,
+      assistantMsg,
+    ];
+
+    setMessages([
+      ...messagesRef.current,
+    ]);
+  } catch (err: any) {
+    const errorText =
+      err.name === "AbortError"
+        ? "Request timed out"
+        : err.message?.includes(
+            "fetch"
+          )
+        ? "Scraper server offline"
+        : err.message ||
+          "Something went wrong";
+
+    setError(errorText);
+
+    const errorMsg: ChatMessage = {
+      id: uid(),
+      role: "assistant",
+      content: `⚠️ ${errorText}`,
+      timestamp: new Date(),
+    };
+
+    messagesRef.current = [
+      ...messagesRef.current,
+      errorMsg,
+    ];
+
+    setMessages([
+      ...messagesRef.current,
+    ]);
+  } finally {
+    setIsLoading(false);
+  }
+},
+[isLoading]
+
+);
+
+const clearMessages =
+useCallback(() => {
+messagesRef.current = [];
+setMessages([]);
+setError(null);
+}, []);
+
+return {
+messages,
+isLoading,
+error,
+sendMessage,
+clearMessages,
+};
 }

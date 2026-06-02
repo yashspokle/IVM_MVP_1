@@ -95,7 +95,21 @@ Rules:
       }),
     });
 
-    const data = await response.json();
+    if (!response.ok) {
+  const text = await response.text();
+
+  console.error(
+    "[CHAT HTTP ERROR]",
+    response.status,
+    text
+  );
+
+  return res.status(500).json({
+    error: `AI API returned ${response.status}`,
+  });
+}
+
+const data = await response.json();
 
     if (data.error) {
       console.error(`[VOICE API ERROR] ${JSON.stringify(data.error)}`);
@@ -119,56 +133,106 @@ Rules:
 // ─── GET /api/cities ──────────────────────────────────────────────────────────
 
 // POST /api/chat - AI grocery chat assistant (Gemini free tier)
-app.post('/api/chat', async (req, res) => {
+app.post("/api/chat", async (req, res) => {
   const { messages = [], inventory = [] } = req.body;
-  if (!messages.length) return res.status(400).json({ error: 'messages required' });
+
+  if (!messages.length) {
+    return res.status(400).json({
+      error: "messages required",
+    });
+  }
 
   const inventorySummary = inventory.length
-    ? inventory.map(i => i.name + ' (qty:' + i.quantity + (i.expiry_date ? ', expires:' + i.expiry_date : '') + ')').join(', ')
-    : 'empty';
+    ? inventory
+        .map(
+          (i) =>
+            `${i.name} (qty:${i.quantity}${
+              i.expiry_date
+                ? `, expires:${i.expiry_date}`
+                : ""
+            })`
+        )
+        .join(", ")
+    : "empty";
 
-  // Build GitHub Models messages — system prompt as first user turn
-  const systemTurn = 'You are a smart grocery assistant. Current inventory: ' + inventorySummary + '. Help manage groceries, suggest recipes, identify low stock, track expiry dates. Be friendly, concise, and practical.';
-  const contents = [
-    { role: 'user', parts: [{ text: systemTurn }] },
-    { role: 'model', parts: [{ text: 'Got it! I am your grocery assistant. How can I help?' }] },
-    ...messages.map(m => ({
-      role: m.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: m.content }],
-    })),
-  ];
+  const systemTurn =
+    `You are a smart grocery assistant.
+Current inventory: ${inventorySummary}.
+Help manage groceries, suggest recipes,
+identify low stock, track expiry dates.
+Be friendly, concise, and practical.`;
 
   try {
     const apiKey = process.env.GITHUB_TOKEN;
-    const response = await fetch('https://models.inference.ai.azure.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + apiKey,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemTurn },
-          ...messages.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
-        ],
-        max_tokens: 1000,
-        temperature: 0.7,
-      }),
-    });
-    const data = await response.json();
-    if (data.error) {
-      console.error('[CHAT API ERROR]', data.error.message);
-      return res.status(500).json({ error: data.error.message });
+
+    if (!apiKey) {
+      return res.status(500).json({
+        error: "GITHUB_TOKEN not configured",
+      });
     }
-    const reply = data.choices?.[0]?.message?.content || 'Sorry, I could not process that.';
-    res.json({ reply });
+
+    const response = await fetch(
+      "https://models.inference.ai.azure.com/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: systemTurn,
+            },
+            ...messages.map((m) => ({
+              role:
+                m.role === "assistant"
+                  ? "assistant"
+                  : "user",
+              content: m.content,
+            })),
+          ],
+          max_tokens: 1000,
+          temperature: 0.7,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const text = await response.text();
+
+      console.error(
+        "[CHAT HTTP ERROR]",
+        response.status,
+        text
+      );
+
+      return res.status(500).json({
+        error: `AI API returned ${response.status}`,
+      });
+    }
+
+    const data = await response.json();
+
+    const reply =
+      data?.choices?.[0]?.message?.content ||
+      "Sorry, I could not process that.";
+
+    return res.json({ reply });
   } catch (err) {
-    console.error('[CHAT ERROR]', err.message);
-    res.status(500).json({ error: 'Chat failed' });
+    console.error("[CHAT ERROR]", err);
+
+    return res.status(500).json({
+      error: err.message,
+      stack:
+        process.env.NODE_ENV !== "production"
+          ? err.stack
+          : undefined,
+    });
   }
 });
-
 app.get("/api/cities", (_, res) => {
   const cities = Object.entries(CITY_CONFIG)
     .map(([id, c]) => ({ id, name: c.name }))
