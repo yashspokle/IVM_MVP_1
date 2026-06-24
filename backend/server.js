@@ -7,7 +7,11 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 
 const pool = require("./src/config/db");
-
+const {
+  scrapeAll,
+  CITY_CONFIG,
+  findNearestCity
+} = require("./scrapers");
 const app = express();
 const authMiddleware = require(
   "./src/middleware/auth"
@@ -221,7 +225,44 @@ app.get(
     }
   }
 );
+app.get("/api/cities", (req, res) => {
+  res.json(Object.keys(CITY_CONFIG));
+});
 
+app.get("/api/prices/:item", async (req, res) => {
+  try {
+    const item = req.params.item;
+
+    let city = req.query.city;
+
+    if (
+      !city &&
+      req.query.lat &&
+      req.query.lng
+    ) {
+      city = findNearestCity(
+        Number(req.query.lat),
+        Number(req.query.lng)
+      );
+    }
+
+    city = city || "mumbai";
+
+    const results = await scrapeAll(
+      item,
+      city
+    );
+
+    res.json(results);
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 /*
 |--------------------------------------------------------------------------
 | 404
