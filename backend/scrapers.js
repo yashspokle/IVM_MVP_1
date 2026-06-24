@@ -85,13 +85,16 @@ async function getBrowser() {
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
     try {
       sharedBrowser = await chromium.launch({
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-        ],
-      });
+  headless: true,
+  executablePath:
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
+  args: [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+  ],
+});
     } catch (err) {
       console.error(
         "Browser launch failed:",
@@ -417,10 +420,9 @@ if (
     scrapeDMart(itemName, resolvedCity),
   ]);
 
-  const final = [r1, r2, r3, r4].map(r =>
-    r.status === "fulfilled" ? r.value : { store: "Unknown", redirectOnly: true, error: r.reason?.message }
-  );
-
+  const final = [r1, r2, r3, r4]
+  .filter(r => r.status === "fulfilled")
+  .map(r => r.value);
   final.forEach(r => {
     if (r.redirectOnly) console.log(`  [${r.store}] → redirect only`);
     else console.log(`  [${r.store}] ₹${r.price} | ${r.unit} | ${r.productName}`);

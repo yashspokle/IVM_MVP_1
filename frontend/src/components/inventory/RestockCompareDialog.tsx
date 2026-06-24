@@ -190,10 +190,25 @@ const RestockCompareDialog = ({ item, open, onClose }: RestockCompareDialogProps
     setCached(false);
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(90000) });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || `Server error ${res.status}`);
-      }
+     if (!res.ok) {
+  setResults([
+    {
+      store: "Blinkit",
+      logo: "⚡",
+      url: `https://blinkit.com/s/?q=${item?.name}`,
+      price: null,
+      unit: "",
+      inStock: true,
+      deliveryTime: "10 mins",
+      deliveryFee: 0,
+      productName: "",
+      error: "Unavailable",
+      redirectOnly: true,
+    }
+  ]);
+
+  return;
+}
       const data = await res.json();
       setResults(data.results || []);
       setCached(data.cached || false);

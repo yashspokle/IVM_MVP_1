@@ -1,3 +1,4 @@
+import api from "../services/api";
 import { useState, useEffect, useMemo, useCallback } from "react";
 
 export interface InventoryItem {
@@ -16,148 +17,376 @@ const [inventory, setInventory] = useState<InventoryItem[]>([]);
 
 // Load inventory when user changes
 useEffect(() => {
-if (!userId) {
-setInventory([]);
-return;
-}
+  const fetchInventory = async () => {
+    try {
+      const token =
+        localStorage.getItem(
+          "grocero_token"
+        );
 
-try {
-  const savedItems = localStorage.getItem(
-    `grocero_inventory_${userId}`
-  );
+      if (!token) {
+        setInventory([]);
+        return;
+      }
 
-  setInventory(
-    savedItems ? JSON.parse(savedItems) : []
-  );
-} catch (error) {
-  console.error("Inventory load error:", error);
-  setInventory([]);
-}
+      const response =
+        await api.get(
+          "/inventory",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
 
+      const items =
+        response.data.map(
+          (item: any) => ({
+            id: item.id.toString(),
+            name: item.item_name,
+            quantity: item.quantity,
+            source:
+              item.source ||
+              "manual",
+            expiryDate:
+              item.expiry_date,
+            category:
+              item.category,
+            createdAt:
+              item.created_at,
+            userId:
+              item.user_id?.toString() ||
+              "",
+          })
+        );
+
+      setInventory(items);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  fetchInventory();
 }, [userId]);
 
-// Persist inventory
-useEffect(() => {
-if (!userId) return;
-
-try {
-  localStorage.setItem(
-    `grocero_inventory_${userId}`,
-    JSON.stringify(inventory)
-  );
-} catch (error) {
-  console.error("Inventory save error:", error);
-}
-
-}, [inventory, userId]);
 
 const addItem = useCallback(
-(
-name: string,
-quantity: number,
-source: "scan" | "manual" | "voice",
-expiryDate?: string,
-category?: string
-) => {
-if (!userId) return;
+  async (
+    name: string,
+    quantity: number,
+    source: "scan" | "manual" | "voice",
+    expiryDate?: string,
+    category?: string
+  ) => {
+    try {
+      const token =
+        localStorage.getItem(
+          "grocero_token"
+        );
 
-  setInventory((prev) => {
-    const existingItem = prev.find(
-      (item) =>
-        item.name.toLowerCase() ===
-        name.toLowerCase()
-    );
+      await api.post(
+        "/inventory",
+        {
+          item_name: name,
+          quantity,
+          category,
+          bought_on: new Date()
+            .toISOString()
+            .split("T")[0],
+          expiry_date: expiryDate,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-    if (existingItem) {
-      return prev.map((item) =>
-        item.id === existingItem.id
-          ? {
-              ...item,
-              quantity:
-                item.quantity + quantity,
-            }
-          : item
+      const response =
+        await api.get(
+          "/inventory",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+      const items =
+        response.data.map(
+          (item: any) => ({
+            id: item.id.toString(),
+            name: item.item_name,
+            quantity: item.quantity,
+            source:
+              item.source ||
+              "manual",
+            expiryDate:
+              item.expiry_date,
+            category:
+              item.category,
+            createdAt:
+              item.created_at,
+            userId:
+              item.user_id?.toString() ||
+              "",
+          })
+        );
+
+      setInventory(items);
+    } catch (error) {
+      console.error(error);
+    }
+  },
+  [userId]
+);
+const removeItem = useCallback(
+  async (name: string, quantity: number) => {
+    try {
+      const token =
+        localStorage.getItem(
+          "grocero_token"
+        );
+
+      if (!token) return;
+
+      const item = inventory.find(
+        (i) =>
+          i.name.toLowerCase() ===
+          name.toLowerCase()
+      );
+
+      if (!item) return;
+
+      const newQuantity =
+        item.quantity - quantity;
+
+      if (newQuantity <= 0) {
+        await api.delete(
+          `/inventory/${item.id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+      } else {
+        await api.put(
+          `/inventory/${item.id}`,
+          {
+            quantity: newQuantity,
+            expiry_date:
+              item.expiryDate
+                ? item.expiryDate.split("T")[0]
+                : null,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+      }
+
+      const response =
+        await api.get(
+          "/inventory",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+      setInventory(
+        response.data.map(
+          (item: any) => ({
+            id: item.id.toString(),
+            name: item.item_name,
+            quantity: item.quantity,
+            source:
+              item.source ||
+              "manual",
+            expiryDate:
+              item.expiry_date,
+            category:
+              item.category,
+            createdAt:
+              item.created_at,
+            userId:
+              item.user_id?.toString() ||
+              "",
+          })
+        )
+      );
+    } catch (error) {
+      console.error(error);
+    }
+  },
+  [inventory]
+);
+const deleteItem = useCallback(
+  async (id: string) => {
+    try {
+      const token =
+        localStorage.getItem(
+          "grocero_token"
+        );
+
+      await api.delete(
+        `/inventory/${id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const response =
+        await api.get(
+          "/inventory",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+      const items =
+        response.data.map(
+          (item: any) => ({
+            id: item.id.toString(),
+            name: item.item_name,
+            quantity: item.quantity,
+            source:
+              item.source ||
+              "manual",
+            expiryDate:
+              item.expiry_date,
+            category:
+              item.category,
+            createdAt:
+              item.created_at,
+            userId:
+              item.user_id?.toString() ||
+              "",
+          })
+        );
+
+      setInventory(items);
+    } catch (error) {
+      console.error(error);
+    }
+  },
+  []
+);
+const updateQuantity = useCallback(
+  async (id: string, quantity: number) => {
+    try {
+      const token =
+        localStorage.getItem(
+          "grocero_token"
+        );
+
+      if (!token) {
+        console.error(
+          "No auth token found"
+        );
+        return;
+      }
+
+      const parsedQuantity =
+        Number(quantity);
+
+      if (
+        isNaN(parsedQuantity) ||
+        parsedQuantity < 0
+      ) {
+        console.error(
+          "Invalid quantity:",
+          quantity
+        );
+        return;
+      }
+
+      const currentItem =
+        inventory.find(
+          (item) => item.id === id
+        );
+
+      if (!currentItem) {
+        console.error(
+          "Item not found:",
+          id
+        );
+        return;
+      }
+
+      console.log("UPDATE:", {
+        id,
+        quantity: parsedQuantity,
+        expiryDate:
+          currentItem.expiryDate,
+      });
+
+      await api.put(
+        `/inventory/${id}`,
+        {
+          quantity: parsedQuantity,
+          expiry_date:
+            currentItem.expiryDate
+              ? currentItem.expiryDate.split(
+                  "T"
+                )[0]
+              : null,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const response =
+        await api.get(
+          "/inventory",
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+      const items =
+        response.data.map(
+          (item: any) => ({
+            id: item.id.toString(),
+            name: item.item_name,
+            quantity: item.quantity,
+            source:
+              item.source ||
+              "manual",
+            expiryDate:
+              item.expiry_date,
+            category:
+              item.category,
+            createdAt:
+              item.created_at,
+            userId:
+              item.user_id?.toString() ||
+              "",
+          })
+        );
+
+      setInventory(items);
+    } catch (error) {
+      console.error(
+        "Update quantity failed:",
+        error
       );
     }
-
-    const newItem: InventoryItem = {
-      id: crypto.randomUUID(),
-      name,
-      quantity,
-      source,
-      expiryDate,
-      category,
-      createdAt:
-        new Date().toISOString(),
-      userId,
-    };
-
-    return [...prev, newItem];
-  });
-},
-[userId]
-
-
-);
-
-const removeItem = useCallback(
-(name: string, quantity: number) => {
-if (!userId) return;
-
-  setInventory((prev) =>
-    prev
-      .map((item) => {
-        if (
-          item.name.toLowerCase() ===
-          name.toLowerCase()
-        ) {
-          const newQuantity =
-            item.quantity - quantity;
-
-          return newQuantity > 0
-            ? {
-                ...item,
-                quantity: newQuantity,
-              }
-            : null;
-        }
-
-        return item;
-      })
-      .filter(
-        (
-          item
-        ): item is InventoryItem =>
-          item !== null
-      )
-  );
-},
-[userId]
-
-);
-
-const deleteItem = useCallback(
-(id: string) => {
-setInventory((prev) =>
-prev.filter(
-(item) => item.id !== id
-)
-);
-},
-[]
-);
-
-const updateQuantity = useCallback(
-(id: string, quantity: number) => {
-setInventory((prev) =>
-prev.map((item) =>
-item.id === id
-? { ...item, quantity }
-: item
-)
-);
-},
-[]
+  },
+  [inventory]
 );
 
 const updateExpiryDate = useCallback(
@@ -172,42 +401,59 @@ item.id === id
 },
 []
 );
+const clearInventory = useCallback(
+  async () => {
+    try {
+      const token =
+        localStorage.getItem(
+          "grocero_token"
+        );
 
-const clearInventory = useCallback(() => {
-if (!userId) return;
-setInventory([]);
+      if (!token) return;
 
-localStorage.removeItem(
-  `grocero_inventory_${userId}`
+      for (const item of inventory) {
+        await api.delete(
+          `/inventory/${item.id}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+      }
+
+      setInventory([]);
+    } catch (error) {
+      console.error(
+        "Clear inventory failed:",
+        error
+      );
+    }
+  },
+  [inventory]
 );
-
-
-}, [userId]);
-
 const lowStockItems = useMemo(
-() =>
-inventory.filter(
-(item) => item.quantity < 3
-),
-[inventory]
+  () =>
+    inventory.filter(
+      (item) => item.quantity < 3
+    ),
+  [inventory]
 );
 
 const expiredItems = useMemo(
-() =>
-inventory.filter((item) => {
-if (!item.expiryDate)
-return false;
+  () =>
+    inventory.filter((item) => {
+      if (!item.expiryDate)
+        return false;
 
-
-    return (
-      new Date(item.expiryDate) <
-      new Date()
-    );
-  }),
-[inventory]
-
-
+      return (
+        new Date(item.expiryDate) <
+        new Date()
+      );
+    }),
+  [inventory]
 );
+
 
 const expiringItems = useMemo(
 () =>
