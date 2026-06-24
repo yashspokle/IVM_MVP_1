@@ -271,21 +271,20 @@ app.get("/api/prices/:item", async (req, res) => {
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
-
-    const [existing] = await pool.query(
+const [existing] = await pool.query(
   `
   SELECT *
-  FROM inventory_items
-  WHERE user_id = ?
-  AND item_name = ?
+  FROM users
+  WHERE email = ?
   `,
-  [user_id, item_name]
+  [email]
+
 );
 
     if (existing.length > 0) {
       return res.status(400).json({
         success: false,
-        message: "Item already exists",
+        message: "User already exists",
       });
     }
 
