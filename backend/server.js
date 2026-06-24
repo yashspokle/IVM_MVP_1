@@ -88,20 +88,28 @@ app.get(
   "/api/inventory",
   authMiddleware,
   async (req, res) => {
-  try {
-    const [rows] = await pool.query(
-      "SELECT * FROM inventory_items ORDER BY created_at DESC"
-    );
+    try {
+      const [rows] = await pool.query(
+        `
+        SELECT *
+        FROM inventory_items
+        WHERE user_id = ?
+        ORDER BY created_at DESC
+        `,
+        [req.user.id]
+      );
 
-    res.json(rows);
-  } catch (error) {
-    console.error(error);
+      res.json(rows);
 
-    res.status(500).json({
-      error: error.message,
-    });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        error: error.message,
+      });
+    }
   }
-});
+);
 
 app.post(
   "/api/inventory",
