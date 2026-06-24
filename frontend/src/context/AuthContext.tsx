@@ -5,6 +5,7 @@ import {
   useState,
   ReactNode,
 } from "react";
+import api from "../services/api";
 
 interface User {
   id: string;
@@ -47,42 +48,62 @@ export function AuthProvider({
   }, []);
 
   const signIn = async (
-    email: string,
-    password: string
-  ): Promise<boolean> => {
-    const userData: User = {
-      id: Date.now().toString(),
-      email,
-    };
+  email: string,
+  password: string
+): Promise<boolean> => {
+  try {
+    const response = await api.post(
+      "/auth/login",
+      {
+        email,
+        password,
+      }
+    );
+
+    const { token, user } = response.data;
+
+    localStorage.setItem(
+      "grocero_token",
+      token
+    );
 
     localStorage.setItem(
       "grocero_user",
-      JSON.stringify(userData)
+      JSON.stringify(user)
     );
 
-    setUser(userData);
+    setUser(user);
 
     return true;
-  };
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
+};
 
   const signUp = async (
-    email: string,
-    password: string
-  ): Promise<boolean> => {
-    const userData: User = {
-      id: Date.now().toString(),
-      email,
-    };
-
-    localStorage.setItem(
-      "grocero_user",
-      JSON.stringify(userData)
+  email: string,
+  password: string
+): Promise<boolean> => {
+  try {
+    await api.post(
+      "/auth/register",
+      {
+        name: email.split("@")[0],
+        email,
+        password,
+      }
     );
 
-    setUser(userData);
-
-    return true;
-  };
+    return await signIn(
+      email,
+      password
+    );
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
+};
 
   const signOut = () => {
     localStorage.removeItem("grocero_user");

@@ -228,7 +228,12 @@ const InventoryDashboard = ({
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 border-emerald-200"
-                        onClick={() => onUpdateQuantity(item.id, -1)}
+                        onClick={() =>
+  onUpdateQuantity(
+    item.id,
+    item.quantity - 1
+  )
+}
                         disabled={item.quantity <= 1}
                       >
                         <Minus className="h-3 w-3" />
@@ -242,7 +247,12 @@ const InventoryDashboard = ({
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 border-emerald-200"
-                        onClick={() => onUpdateQuantity(item.id, 1)}
+                        onClick={() =>
+  onUpdateQuantity(
+    item.id,
+    item.quantity + 1
+  )
+}
                       >
                         <Plus className="h-3 w-3" />
                       </Button>

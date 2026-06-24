@@ -1,13 +1,5 @@
-let chromium;
+const { chromium } = require("playwright");
 
-try {
-  chromium = require("playwright").chromium;
-} catch (err) {
-  console.error(
-    "Playwright not available:",
-    err.message
-  );
-}
 const CACHE = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
 const CITY_CONFIG = {
@@ -79,8 +71,8 @@ let sharedBrowser = null;
 
 async function getBrowser() {
   if (!chromium) {
-    throw new Error("SCRAPER_UNAVAILABLE");
-  }
+  return null;
+}
 
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
     try {
@@ -246,6 +238,20 @@ async function scrapeBlinkit(itemName, city) {
   );
 
   const browser = await getBrowser();
+  if (!browser) {
+  return [
+    {
+      store: "Blinkit",
+      redirectOnly: true,
+      url: `https://blinkit.com/s/?q=${encodeURIComponent(itemName)}`
+    },
+    {
+      store: "Zepto",
+      redirectOnly: true,
+      url: `https://www.zeptonow.com/search?query=${encodeURIComponent(itemName)}`
+    }
+  ];
+}
   let context;
   try {
     const { page, context: ctx } = await newStealthPage(browser, city);
@@ -299,6 +305,20 @@ async function scrapeZepto(itemName, city) {
   );
 
   const browser = await getBrowser();
+  if (!browser) {
+  return [
+    {
+      store: "Blinkit",
+      redirectOnly: true,
+      url: `https://blinkit.com/s/?q=${encodeURIComponent(query)}`
+    },
+    {
+      store: "Zepto",
+      redirectOnly: true,
+      url: `https://www.zeptonow.com/search?query=${encodeURIComponent(query)}`
+    }
+  ];
+}
   let context;
   try {
     const { page, context: ctx } = await newStealthPage(browser, city);
