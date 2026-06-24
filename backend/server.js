@@ -18,17 +18,7 @@ const authMiddleware = require(
 );
 app.use(helmet());
 
-app.use(
-  cors({
-    origin: [
-      "http://localhost:8080",
-      "http://localhost:8081",
-      "http://localhost:5173",
-      "https://grocero-omega.vercel.app",
-    ],
-    credentials: true,
-  })
-);
+app.use(cors());
 
 app.use(express.json());
 app.post("/hello", (req, res) => {
