@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "description": "Real-time grocery price scraper for Grocero app",
   "main": "server.js",
+  
   "scripts": {
-  "postinstall": "npx playwright install chromium",
-  "start": "node server.js"
+    "start": "node server.js",
+    "postinstall": "npx playwright install chromium"
+  
 },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
