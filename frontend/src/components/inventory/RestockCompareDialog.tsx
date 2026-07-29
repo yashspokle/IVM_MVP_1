@@ -37,7 +37,8 @@ interface RestockCompareDialogProps {
 const SCRAPER_URL =
   import.meta.env.VITE_API_URL ||
   "http://localhost:3001";
-  console.log("SCRAPER_URL =", SCRAPER_URL);
+
+console.log("SCRAPER_URL =", SCRAPER_URL);
 
 const STORE_STYLE: Record<string, { emoji: string }> = {
   "Blinkit":           { emoji: "⚡" },
