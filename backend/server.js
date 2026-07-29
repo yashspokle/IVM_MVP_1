@@ -6,6 +6,134 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const pool = require("./src/config/db");
+const {
+  scrapeAll,
+  CITY_CONFIG,
+  findNearestCity,
+} = require("./scrapers");
+
+const app = express();          // <-- CREATE app FIRST
+
+const authMiddleware = require("./src/middleware/auth");
+
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
+app.use(morgan("dev"));
+
+// NOW it is safe to use app.post()
+
+app.post("/api/chat", async (req, res) => {
+  try {
+    const { messages = [], inventory = [] } = req.body;
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+    });
+
+    const inventoryText =
+      inventory.length > 0
+        ? inventory
+            .map(
+              (item) =>
+                `${item.item_name || item.name} - Quantity: ${
+                  item.quantity
+                }, Expiry: ${item.expiry_date || "N/A"}`
+            )
+            .join("\n")
+        : "Inventory is empty.";
+
+    const conversation = messages
+      .map((msg) => `${msg.role}: ${msg.content}`)
+      .join("\n");
+
+    const prompt = `
+You are Grocero AI, a smart grocery assistant.
+
+Current Inventory:
+${inventoryText}
+
+Conversation:
+${conversation}
+
+Help the user with:
+- Grocery management
+- Recipe suggestions
+- Expiry reminders
+- Shopping advice
+- Healthy food recommendations
+
+Answer naturally and briefly.
+`;
+
+    const result = await model.generateContent(prompt);
+
+    const reply = result.response.text();
+
+    res.json({
+      success: true,
+      reply,
+    });
+  } catch (error) {
+    console.error("Chat Error:", error);
+
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+    const inventoryText =
+      inventory?.length > 0
+        ? inventory
+            .map(
+              (i) =>
+                `${i.name} (${i.quantity}) Expiry: ${
+                  i.expiry_date || "N/A"
+                }`
+            )
+            .join("\n")
+        : "Inventory is empty.";
+
+    const history = messages
+      .map((m) => `${m.role}: ${m.content}`)
+      .join("\n");
+
+    const prompt = `
+You are Grocero AI.
+
+Current Inventory:
+${inventoryText}
+
+Conversation:
+${history}
+
+Reply naturally and help the user with grocery management,
+recipes, expiry reminders, shopping advice, and inventory questions.
+`;
+
+    const result = await model.generateContent(prompt);
+
+    const reply = result.response.text();
+
+    res.json({
+      success: true,
+      reply,
+    });
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      error: err.message,
+    });
+  }
+});
 const pool = require("./src/config/db");
 const {
   scrapeAll,
@@ -261,6 +389,8 @@ app.get("/api/prices/:item", async (req, res) => {
     });
   }
 });
+
+
 /*
 |--------------------------------------------------------------------------
 | 404

@@ -34,18 +34,22 @@ export function AuthProvider({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const savedUser = localStorage.getItem("grocero_user");
+  try {
+    const savedUser = localStorage.getItem("grocero_user");
+    const savedToken = localStorage.getItem("grocero_token");
 
-      if (savedUser) {
-        setUser(JSON.parse(savedUser));
-      }
-    } catch (error) {
-      console.error("Failed to load user:", error);
-    } finally {
-      setLoading(false);
+    if (savedUser && savedToken) {
+      setUser(JSON.parse(savedUser));
+    } else {
+      localStorage.removeItem("grocero_user");
+      localStorage.removeItem("grocero_token");
     }
-  }, []);
+  } catch (error) {
+    console.error("Failed to load auth:", error);
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
   const signIn = async (
   email: string,
@@ -106,11 +110,12 @@ export function AuthProvider({
 };
 
   const signOut = () => {
-    localStorage.removeItem("grocero_user");
-    localStorage.removeItem("grocero_inventory");
+  localStorage.removeItem("grocero_user");
+  localStorage.removeItem("grocero_token");
+  localStorage.removeItem("grocero_inventory");
 
-    setUser(null);
-  };
+  setUser(null);
+};
 
   return (
     <AuthContext.Provider
