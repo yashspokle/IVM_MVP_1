@@ -6,7 +6,6 @@ const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const pool = require("./src/config/db");
 const {
@@ -19,31 +18,29 @@ const app = express();          // <-- CREATE app FIRST
 
 const authMiddleware = require("./src/middleware/auth");
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
 app.use(morgan("dev"));
 
+const { GoogleGenAI } = require("@google/genai");
+
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
 // NOW it is safe to use app.post()
 
 app.post("/api/chat", async (req, res) => {
   try {
     const { messages = [], inventory = [] } = req.body;
 
-    const model = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash-lite"
-});
-
     const inventoryText =
       inventory.length > 0
         ? inventory
             .map(
               (item) =>
-                `${item.item_name || item.name} - Quantity: ${
-                  item.quantity
-                }, Expiry: ${item.expiry_date || "N/A"}`
+                `${item.item_name || item.name} - Quantity: ${item.quantity}, Expiry: ${item.expiry_date || "N/A"}`
             )
             .join("\n")
         : "Inventory is empty.";
@@ -71,14 +68,16 @@ Help the user with:
 Answer naturally and briefly.
 `;
 
-    const result = await model.generateContent(prompt);
-
-    const reply = result.response.text();
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+    });
 
     res.json({
       success: true,
-      reply,
+      reply: result.text,
     });
+
   } catch (error) {
     console.error("Chat Error:", error);
 
