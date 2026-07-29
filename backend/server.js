@@ -88,75 +88,7 @@ Answer naturally and briefly.
     });
   }
 });
-    const inventoryText =
-      inventory?.length > 0
-        ? inventory
-            .map(
-              (i) =>
-                `${i.name} (${i.quantity}) Expiry: ${
-                  i.expiry_date || "N/A"
-                }`
-            )
-            .join("\n")
-        : "Inventory is empty.";
-
-    const history = messages
-      .map((m) => `${m.role}: ${m.content}`)
-      .join("\n");
-
-    const prompt = `
-You are Grocero AI.
-
-Current Inventory:
-${inventoryText}
-
-Conversation:
-${history}
-
-Reply naturally and help the user with grocery management,
-recipes, expiry reminders, shopping advice, and inventory questions.
-`;
-
-    const result = await model.generateContent(prompt);
-
-    const reply = result.response.text();
-
-    res.json({
-      success: true,
-      reply,
-    });
-  } catch (err) {
-    console.error(err);
-
-    res.status(500).json({
-      success: false,
-      error: err.message,
-    });
-  }
-});
-const pool = require("./src/config/db");
-const {
-  scrapeAll,
-  CITY_CONFIG,
-  findNearestCity
-} = require("./scrapers");
-const app = express();
-const authMiddleware = require(
-  "./src/middleware/auth"
-);
-app.use(helmet());
-
-app.use(cors());
-
-app.use(express.json());
-app.post("/hello", (req, res) => {
-  res.json({
-    success: true,
-    message: "HELLO WORKS"
-  });
-});
-app.use(morgan("dev"));
-
+    
 /*
 |--------------------------------------------------------------------------
 | Health Check
@@ -184,7 +116,7 @@ app.get("/api/health", (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-app.get("/api/test-db", async (req, res) => {
+app.get("/api/test-db", authMiddleware, async (req, res) => {
   try {
    const [rows] = await pool.query(
   "SELECT * FROM inventory_items WHERE user_id = ? ORDER BY created_at DESC",
