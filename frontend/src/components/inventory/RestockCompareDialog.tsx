@@ -210,11 +210,19 @@ const RestockCompareDialog = ({ item, open, onClose }: RestockCompareDialogProps
   return;
 }
       const data = await res.json();
-      setResults(data.results || []);
-      setCached(data.cached || false);
-      // Update city name if server resolved from coords
-      if (data.cityName && !cityName) setCityName(data.cityName);
-      if (data.city && !city) setCity(data.city);
+
+if (Array.isArray(data)) {
+  // Backend returned an array of stores
+  setResults(data);
+  setCached(false);
+} else {
+  // Backend returned an object
+  setResults(data.results || []);
+  setCached(data.cached || false);
+
+  if (data.cityName && !cityName) setCityName(data.cityName);
+  if (data.city && !city) setCity(data.city);
+}
     } catch (err: any) {
       const msg = err?.message || "";
       setServerError(msg.includes("fetch") || msg.includes("Failed to fetch") ? "not_running" : msg);
